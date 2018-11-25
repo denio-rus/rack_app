@@ -3,67 +3,75 @@ class App
                     'hour' => '%H', 'minute' => '%M', 'second' => '%S' }.freeze
 
   def call(env)
-    @env = env
-    @unknown_formats = []
-    @answer_formats = []
+    @request = Rack::Request.new(env)
 
-    analyze_request_for_directives if need_time?
+    return [404, headers, []] unless need_time?
 
+    @response = FormatedTimeString.new(@request)
     [status, headers, body]
   end
 
+  private
+
   def need_time?
-    @env['REQUEST_METHOD'] == 'GET' && @env['REQUEST_PATH'] == '/time'
+    @request.get? && @request.path == '/time'
   end
 
   def status
-    return 404 unless need_time?
-
-    unknown_formats? ? 400 : 200
+    @response.unknown_formats? ? 400 : 200
   end
 
   def headers
-    { 'Content-Type' => 'text-plain' }
+    { 'Content-Type' => 'text/plain' }
   end
 
   def body
-    return [] unless need_time?
-
-    [] << make_respond_body
+    [] << @response.make
   end
 
-  def make_respond_body
-    return "Unknown time format [#{@unknown_formats.join(', ')}]" if unknown_formats?
+  class FormatedTimeString
+    def initialize(request)
+      @request = request
+      @unknown_formats = []
+      @answer_formats = []
+    end
 
-    format_directives = @answer_formats.join('-')
-    Time.now.strftime(format_directives)
-  end
+    def make
+      return 'Need time format instructions' unless format_given?
 
-  def analyze_request_for_directives
-    return unless format_given?
+      analyze_request_for_directives
+      return "Unknown time format [#{@unknown_formats.join(', ')}]" if unknown_formats?
 
-    formats_from_request.each do |format|
-      if KNOWN_FORMATS.key?(format)
-        @answer_formats << KNOWN_FORMATS[format]
-      else
-        @unknown_formats << format
+      format_directives = @answer_formats.join('-')
+      Time.now.strftime(format_directives)
+    end
+
+    def unknown_formats?
+      @unknown_formats.any?
+    end
+
+    private
+
+    def analyze_request_for_directives
+      formats_from_request.each do |format|
+        if KNOWN_FORMATS.key?(format)
+          @answer_formats << KNOWN_FORMATS[format]
+        else
+          @unknown_formats << format
+        end
       end
     end
-  end
 
-  def format_given?
-    !!@env['QUERY_STRING'].index(/^format=/)
-  end
+    def format_given?
+      !!@request.query_string.index(/^format=./)
+    end
 
-  def formats_from_request
-    string = @env['QUERY_STRING'].split('&')
-    string.select! { |s| s.start_with?('format=') }
-    string.map! { |s| s.gsub('format=', '') }
-    string.map! { |s| s.split(',') }
-    string.flatten
-  end
-
-  def unknown_formats?
-    @unknown_formats.any?
+    def formats_from_request
+      query_string_instructions = @request.query_string.split('&')
+      query_string_instructions.select! { |s| s.start_with?('format=') }
+      query_string_instructions.map! { |s| s.gsub('format=', '') }
+      query_string_instructions.map! { |s| s.split(',') }
+      query_string_instructions.flatten
+    end
   end
 end
