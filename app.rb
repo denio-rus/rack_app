@@ -4,7 +4,7 @@ class App
   def call(env)
     @request = Rack::Request.new(env)
 
-    return not_found_response unless unknown_route?
+    return not_found_response if unknown_route?
     return no_formats_given_response unless format_given?
 
     formatted_time_response
@@ -21,7 +21,7 @@ class App
   end
 
   def unknown_route?
-    @request.get? && @request.path == '/time'
+    !@request.get? || @request.path != '/time'
   end
 
   def formatted_time_response
@@ -38,14 +38,10 @@ class App
   end
 
   def formats_from_request
-    query_string_instructions = @request.query_string.split('&')
-    query_string_instructions.select! { |s| s.start_with?('format=') }
-    query_string_instructions.map! { |s| s.gsub('format=', '') }
-    query_string_instructions.map! { |s| s.split(',') }
-    query_string_instructions.flatten
+    @request.GET['format'].split(',').map(&:strip)
   end
 
   def format_given?
-    !!@request.query_string.index(/^format=./)
+    @request.GET.key?('format') && !@request.GET['format'].strip.empty?
   end
 end
