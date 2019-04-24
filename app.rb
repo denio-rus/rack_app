@@ -42,6 +42,6 @@ class App
   end
 
   def format_given?
-    @request.GET.key?('format') && !@request.GET['format'].strip.empty?
+    formats_from_request.any?
   end
 end
